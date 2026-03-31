@@ -1,0 +1,47 @@
+# ── Personal config and data — NEVER commit these ────────────────────────────
+account_periods.json
+security_map.json
+
+# ACB spreadsheets (personal financial data)
+*.xlsx
+*.xls
+!acb_worksheet_template.xlsx
+
+# QIF output files (generated)
+*.qif
+
+# ── Tests (local only) ────────────────────────────────────────────────────────
+test_qimpexp.py
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# PyInstaller
+*.spec
+*.exe
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# ── OS / editor clutter ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace

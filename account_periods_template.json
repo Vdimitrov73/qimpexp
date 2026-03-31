@@ -1,0 +1,19 @@
+{
+  "VBAL": [
+    {
+      "account": "Your Quicken Account Name",
+      "start": "2021-01-01"
+    }
+  ],
+  "ZCN": [
+    {
+      "account": "Your Quicken Account Name",
+      "start": "2021-01-01",
+      "end": "2024-12-31"
+    },
+    {
+      "account": "Another Account Name",
+      "start": "2025-01-01"
+    }
+  ]
+}
