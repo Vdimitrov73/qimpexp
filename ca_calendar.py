@@ -52,10 +52,11 @@ def _easter_sunday(year: int) -> date:
 
 
 def _observed(d: date) -> date:
-    """Move a Sat holiday to Mon, Sun holiday to Mon."""
-    if d.weekday() == 5:   # Saturday
-        return d + timedelta(2)
-    if d.weekday() == 6:   # Sunday
+    """TSX observes Saturday holidays on the preceding Friday,
+    Sunday holidays on the following Monday."""
+    if d.weekday() == 5:   # Saturday -> preceding Friday
+        return d - timedelta(1)
+    if d.weekday() == 6:   # Sunday -> following Monday
         return d + timedelta(1)
     return d
 

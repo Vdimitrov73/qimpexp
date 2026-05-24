@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 1, 1, 0),
+    prodvers=(1, 1, 1, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -17,12 +17,12 @@ VSVersionInfo(
           [
             StringStruct(u'CompanyName',      u'Vlad Dimitrov'),
             StringStruct(u'FileDescription',  u'QImpExp - ACB Workbook to Quicken QIF Converter'),
-            StringStruct(u'FileVersion',      u'1.0.0.0'),
+            StringStruct(u'FileVersion',      u'1.1.1.0'),
             StringStruct(u'InternalName',     u'qimpexp'),
-            StringStruct(u'LegalCopyright',   u'Copyright (C) 2025 Vlad Dimitrov'),
+            StringStruct(u'LegalCopyright',   u'Copyright (C) 2026 Vlad Dimitrov'),
             StringStruct(u'OriginalFilename', u'qimpexp.exe'),
             StringStruct(u'ProductName',      u'QImpExp'),
-            StringStruct(u'ProductVersion',   u'1.0.0.0'),
+            StringStruct(u'ProductVersion',   u'1.1.1.0'),
           ]
         )
       ]

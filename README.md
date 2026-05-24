@@ -66,6 +66,32 @@ next to your workbook.
 
 ---
 
+## Quicken Toolbar Button Integration
+
+QImpExp includes `ExportToACB.vbs`, a VBScript that automates the full
+export → import cycle from a single Quicken toolbar button:
+
+1. Drives Quicken's **File → Export → QIF File** dialog automatically.
+2. Exports the current year's transactions for your investment account.
+3. Runs `qimpexp --import-qif` to insert any missing rows into the ACB
+   workbook — skipping duplicates safely.
+
+See **[QUICKEN_SETUP.md](QUICKEN_SETUP.md)** for setup instructions.
+
+### `ExportToACB.vbs` configuration
+
+Open the script in any text editor and adjust these constants at the top:
+
+| Constant | Default | What to change |
+|---|---|---|
+| `ACCOUNT_C_PRESSES` | `9` | Number of times to press `C` in the account dropdown to reach your account |
+| `MENU_EXPORT` | `"e"` | Accelerator key for **Export** in the File menu |
+| `MENU_QIF` | `"q"` | Accelerator key for **QIF File...** in the Export submenu |
+| `baseDir` | `%USERPROFILE%\Documents\Tax Documents\QImpExp\` | Folder containing the QIF export and qimpexp |
+| `ACB_PATH` | `%USERPROFILE%\Documents\Tax Documents\acb_worksheet.xlsx` | Path to your ACB workbook |
+
+---
+
 ## Project Structure
 
 ```
@@ -75,13 +101,11 @@ qif_writer.py           QIF building and file writing
 qif_importer.py         Phase 2 — QIF → ACB reverse import
 ca_calendar.py          Canadian TSX market calendar (T+1 settlement)
 qif_colors.py           ANSI colour utilities for the interactive menu
+ExportToACB.vbs         Quicken toolbar button script (export + import automation)
 version.txt             PyInstaller version resource (maintainer use)
-tests/
-  test_qimpexp.py       Full test suite (62 tests, stdlib only)
-sample_data/
-  account_periods.json  Example account period config
-  security_map.json     Example security name mapping
-  *.qif                 Example QIF output files
+QUICKEN_SETUP.md        Quicken toolbar button setup guide
+account_periods.json  Example account period config
+security_map.json     Example security name mapping
 ```
 
 ---
@@ -231,7 +255,7 @@ One QIF file is written per Quicken account.
 !Type:Invst
 L[Your Account Name]
 
-D08/11/2025
+D8/11'25
 NBuy
 YVANGUARD BAL ETF PTFL
 I31.877597
@@ -240,7 +264,7 @@ U396,461.67
 T396,461.67
 ^
 
-D09/29/2025
+D9/ 2'25
 NRtrnCapX
 YBMO S&P/TSX CAPP COMP ETF
 U26.83

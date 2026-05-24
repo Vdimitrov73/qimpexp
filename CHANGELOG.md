@@ -6,40 +6,88 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.1] — 2026-05-24
+
+### Fixed
+- `ca_calendar.py`: TSX Saturday holidays now correctly observed on the
+  preceding Friday instead of the following Monday (US convention was used
+  in error). Affected `next_trading_day` / `prev_trading_day` for any year
+  where a statutory holiday falls on Saturday (e.g. Christmas 2027,
+  New Year's 2028).
+- `qif_importer.py`: ROC rows that passed initial validation but later
+  failed per-unit price derivation during the write pass were counted in
+  both `imported` and `skipped`. Fixed by tracking late-write failures
+  separately and deducting them from the `imported` total in the return dict.
+- `qimpexp.py`: Switching workbooks (option 7) to a directory without
+  `account_periods.json` or `security_map.json` now correctly resets the
+  config to empty instead of retaining the previous workbook's mappings.
+
+## [1.1.0] — 2025-04-01
+- **Quicken toolbar button integration** (`ExportToACB.vbs`)
+  - Single-click automation: drives Quicken's QIF export dialog, then
+    calls `qimpexp --import-qif` to update the ACB workbook
+  - Pre-flight checks: verifies workbook and qimpexp exist, creates
+    output directory, deletes stale QIF to prevent overwrite prompts
+  - Export validation: file existence, size, and `!Type:Invst` content
+    check before invoking importer
+  - Runs `qimpexp` in a visible console window so progress is visible
+  - Falls back from `qimpexp.exe` to `python qimpexp.py` automatically
+  - Setup instructions in `QUICKEN_SETUP.md`
+  
 ## [1.0.0] — 2025-03-30
 
 ### Added
 - **Phase 1 — ACB → QIF export**
-  - Reads `.xlsx` ACB workbook via `openpyxl` (no external parser dependencies for core logic)
-  - Supports Buy, Sell, ROC (return of capital), and phantom distribution transactions
-  - Multi-account support via `account_periods.json` — maps each ticker to one or more
-    Quicken account names with date ranges
+  - Reads `.xlsx` ACB workbook via `openpyxl`
+  - Supports Buy, Sell, ROC (return of capital), and phantom distribution
+    transactions
+  - Multi-account support via `account_periods.json` — maps each ticker
+    to one or more Quicken account names with date ranges; overlap
+    validation raises an error on conflicting periods
   - Security name mapping via `security_map.json`
   - Date filters: `--year YYYY`, `--start`, `--end`
   - Mode filters: `full`, `tax-adjustments` (ROC only), `buys-sells`
   - `--dry-run` preview without writing files
   - `--verbose` detailed parse/mapping trace
-  - One QIF file per Quicken account, filename `<Account>_<YYYYMMDD>_<YYYYMMDD>.qif`
-  - QIF date format: `MM/DD/YYYY`
-  - `RtrnCapX` blocks include `L[Account]` and `$amount` lines matching Quicken's native format
+  - One QIF file per Quicken account, filename
+    `<Account>_<YYYYMMDD>_<YYYYMMDD>.qif`
+  - QIF date format: Quicken native `M/D'YY` with space-padded day
+    (e.g. `8/11'25`, `9/ 2'25`, `12/30'25`)
+  - Opening Cash block prepended to each QIF file for correct Quicken
+    import starting balance
+  - `RtrnCapX` blocks include `L[Account]` and `$amount` lines matching
+    Quicken's native export format exactly
   - Amounts formatted with thousands commas (`1,038.48`)
 
 - **ROC share balance logic**
-  - Column G (Share Balance) from the workbook is used as the authoritative share count
-    for ROC amount computation — never column D
-  - Column D on ROC rows is ignored with a warning if populated
-  - Falls back to running balance reconstructed from Buy/Sell rows when column G is absent
-  - Share balance reconstruction happens before date filtering, so mid-history date ranges
-    always have the correct balance
+  - Column G (Share Balance) used as authoritative share count for ROC
+    amount computation — never column D
+  - Column D on ROC rows ignored with a warning if populated
+  - Falls back to running balance reconstructed from Buy/Sell rows when
+    column G is absent or zero
+  - Warning emitted on negative column G; falls back to running balance
   - Warning emitted when share balance goes negative after a Sell
-  - Zero-share ROC rows are skipped with a warning
+  - Zero-share ROC rows skipped with a warning
+  - `_derive_roc_price` finds the shortest decimal precision (4–8 dp)
+    that exactly reconstructs the two-decimal-place amount
 
 - **Phase 2 — QIF → ACB import**
-  - Reads Quicken-exported QIF files (both native `M/D'YY` and standard `MM/DD/YYYY` dates)
+  - Reads Quicken-exported QIF files (both native `M/D'YY` and standard
+    `MM/DD/YYYY` dates)
   - Supports Buy, Sell, RtrnCapX; other actions skipped with a note
-  - Buy/Sell: Quicken trade date → settlement date (T+1 Canadian trading day) written to ACB
+  - Buy/Sell: Quicken trade date → settlement date (T+1 Canadian trading
+    day) written to ACB
   - RtrnCapX: record date unchanged (same in both Quicken and ACB)
-  - Appends rows to the correct sheet with ACB formula strings in columns F–J
+  - ROC rows with no `I` (price) line: per-unit price derived from
+    workbook share balance at the insertion position
+  - Rows inserted in correct chronological order, not appended at end
+  - Full workbook formula rewrite after insertion preserves ACB
+    formula integrity for all rows below the insertion point
+  - Duplicate detection with fuzzy price rounding:
+    Buy/Sell uses 2 dp (catches Quicken truncation), ROC uses 5 dp
+    (distinguishes same-date distributions)
+  - Automatic timestamped backup before any write; rollback on formula
+    integrity failure
   - `--dry-run` preview without touching the workbook
 
 - **Canadian TSX market calendar** (`ca_calendar.py`)

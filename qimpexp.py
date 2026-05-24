@@ -721,6 +721,8 @@ def run_interactive():
                 acb_path = p; acb_dir = p.parent
                 ap_path  = acb_dir / "account_periods.json"
                 sm_path  = acb_dir / "security_map.json"
+                # Reset config for new workbook
+                account_periods = security_map = None
                 _ok(f"Workbook: {acb_path}")
                 if ap_path.exists():
                     account_periods = load_account_periods(ap_path)

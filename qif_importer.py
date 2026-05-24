@@ -473,6 +473,8 @@ def import_qif_to_acb(
     imported = 0
     skipped  = 0
 
+    late_skipped = 0  # rows that pass initial mapping but fail during write
+
     for txn in transactions:
         action = txn["action"]
 
@@ -619,7 +621,7 @@ def import_qif_to_acb(
 
         return {
             "fatal": None, "warnings": warnings_out,
-            "imported": imported, "skipped": skipped,
+            "imported": imported, "skipped": skipped + late_skipped,
             "rows_by_sheet": rows_by_sheet,
             "sheets_written": {t: len(r) for t, r in rows_by_sheet.items()},
         }
@@ -709,7 +711,7 @@ def import_qif_to_acb(
                     warnings_out.append(w)
                     if verbose:
                         print(w)
-                    skipped += 1
+                    late_skipped += 1
                     continue
 
             # Single unified dup check — after price is known for all types
@@ -804,7 +806,7 @@ def import_qif_to_acb(
             "fatal":         rollback_reason,
             "warnings":      warnings_out,
             "imported":      0,
-            "skipped":       skipped,
+            "skipped":       skipped + late_skipped,
             "rows_by_sheet": rows_by_sheet,
             "backup_path":   str(backup_path),
         }
@@ -820,8 +822,8 @@ def import_qif_to_acb(
     return {
         "fatal":          None,
         "warnings":       warnings_out,
-        "imported":       imported,
-        "skipped":        skipped,
+        "imported":       imported - late_skipped,
+        "skipped":        skipped + late_skipped,
         "rows_by_sheet":  rows_by_sheet,
         "sheets_written": sheets_written,
         "backup_path":    str(backup_path),
