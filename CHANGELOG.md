@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [1.1.2] — 2026-08-10
+
+### Fixed
+- `qif_importer.py`: Fix dedup key in QIF import to include shares
+Previously the duplicate-detection key was (date, type, price),
+which caused legitimate same-day/same-price Buy or Sell
+transactions with different share counts to be silently skipped
+as duplicates. Added shares (rounded to 4dp) to the key so
+distinct trades no longer collide.
 
 ## [1.1.1] — 2026-05-24
 
