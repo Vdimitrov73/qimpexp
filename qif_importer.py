@@ -219,7 +219,7 @@ def _find_insertion_row(ws, target_date: date, last_data_row: int) -> int:
 
 def _get_existing_rows(ws, last_data_row: int) -> set:
     """
-    Return set of (date, type_str, round(price,7)) for duplicate detection.
+    Return set of (date, type_str, round(price,7), round(shares,4)) for duplicate detection.
     """
     existing = set()
     for r in range(2, last_data_row + 1):
@@ -227,19 +227,21 @@ def _get_existing_rows(ws, last_data_row: int) -> set:
         if not txn_type:
             continue
         d = _parse_cell_date(ws.cell(r, 1).value)
-        price_val = ws.cell(r, 3).value
+        price_val  = ws.cell(r, 3).value
+        shares_val = ws.cell(r, 4).value
         if d and txn_type and price_val is not None:
             try:
                 typ = str(txn_type).strip()
                 if typ in ("Buy", "Sell"):
                     pk = round(float(price_val), 2)   # fuzzy: catches Quicken truncation
+                    sk = round(float(shares_val), 4) if shares_val is not None else None
                 else:                                  # ROC
                     pk = round(float(price_val), 5)   # precise enough to distinguish same-date ROCs
-                existing.add((d, typ, pk))
+                    sk = None                          # ROC rows have no shares in col D
+                existing.add((d, typ, pk, sk))
             except (ValueError, TypeError):
                 pass
     return existing
-
 
 def _format_date_str(d: date) -> str:
     """Format a date as YYYY-MMM-DD (workbook canonical format)."""
@@ -716,10 +718,12 @@ def import_qif_to_acb(
 
             # Single unified dup check — after price is known for all types
             if acb_type in ("Buy", "Sell"):
-                price_key = round(float(price), 2) if price is not None else None
+                price_key  = round(float(price), 2) if price is not None else None
+                shares_key = round(float(shares), 4) if shares is not None else None
             else:  # ROC
-                price_key = round(float(price), 5) if price is not None else None
-            dup_key = (acb_date, acb_type, price_key)
+                price_key  = round(float(price), 5) if price is not None else None
+                shares_key = None
+            dup_key = (acb_date, acb_type, price_key, shares_key)
             if dup_key in existing:
                 w = (f"[SKIP-DUP] {ticker} {acb_date} {acb_type} "
                      f"price={price} — already in sheet")
