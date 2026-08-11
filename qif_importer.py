@@ -25,6 +25,7 @@ Insertion order: rows are inserted in date order using ws.insert_rows(), exactly
 import re
 import shutil
 import tempfile
+from collections import Counter
 from copy import copy
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -217,11 +218,13 @@ def _find_insertion_row(ws, target_date: date, last_data_row: int) -> int:
     return insert_after + 1
 
 
-def _get_existing_rows(ws, last_data_row: int) -> set:
+def _get_existing_rows(ws, last_data_row: int) -> Counter:
     """
-    Return set of (date, type_str, round(price,7), round(shares,4)) for duplicate detection.
+    Return a Counter of (date, type_str, round(price,7), round(shares,4)) ->
+    occurrence count, for duplicate detection. Each row already in the sheet
+    only cancel out ONE matching QIF transaction.
     """
-    existing = set()
+    existing = Counter()
     for r in range(2, last_data_row + 1):
         txn_type = ws.cell(r, 2).value
         if not txn_type:
@@ -233,12 +236,12 @@ def _get_existing_rows(ws, last_data_row: int) -> set:
             try:
                 typ = str(txn_type).strip()
                 if typ in ("Buy", "Sell"):
-                    pk = round(float(price_val), 2)   # fuzzy: catches Quicken truncation
+                    pk = round(float(price_val), 2)
                     sk = round(float(shares_val), 4) if shares_val is not None else None
-                else:                                  # ROC
-                    pk = round(float(price_val), 5)   # precise enough to distinguish same-date ROCs
-                    sk = None                          # ROC rows have no shares in col D
-                existing.add((d, typ, pk, sk))
+                else:  # ROC
+                    pk = round(float(price_val), 5)
+                    sk = None
+                existing[(d, typ, pk, sk)] += 1
             except (ValueError, TypeError):
                 pass
     return existing
@@ -724,13 +727,14 @@ def import_qif_to_acb(
                 price_key  = round(float(price), 5) if price is not None else None
                 shares_key = None
             dup_key = (acb_date, acb_type, price_key, shares_key)
-            if dup_key in existing:
+            if existing[dup_key] > 0:
                 w = (f"[SKIP-DUP] {ticker} {acb_date} {acb_type} "
                      f"price={price} — already in sheet")
                 warnings_out.append(w)
                 if verbose:
                     print(w)
                 skipped += 1
+                existing[dup_key] -= 1
                 continue
 
             # Insert a blank row at the target position
@@ -772,7 +776,6 @@ def import_qif_to_acb(
             _rewrite_formulas_from(ws, insert_at, new_last, fonts)
 
             # Update tracking
-            existing.add(dup_key)
             sheets_written[ticker] = sheets_written.get(ticker, 0) + 1
 
             if verbose:

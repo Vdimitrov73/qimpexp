@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [1.1.3] — 2026-08-10
+
+### Fixed
+- `qif_importer.py`: Duplicate detection used a `set`, which could only
+  track whether a (date, type, price, shares) combination existed at all —
+  not how many times. Two genuinely distinct transactions sharing the
+  exact same date/type/price/shares (e.g. two separate same-size fills at
+  the same price on one day) would incorrectly collapse into one, silently
+  dropping the second. Switched to a `Counter` (multiset) so each row
+  already in the sheet only cancels out one matching QIF transaction.
+
 ## [1.1.2] — 2026-08-10
 
 ### Fixed
