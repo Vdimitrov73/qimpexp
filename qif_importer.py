@@ -187,11 +187,20 @@ def _parse_cell_date(val) -> date | None:
     # YYYY-MMM-DD  (workbook format)
     m = re.match(r"(\d{4})-([A-Za-z]{3})-(\d{2})", s)
     if m:
-        return date(int(m.group(1)), MONTH_MAP[m.group(2).lower()], int(m.group(3)))
+        month = MONTH_MAP.get(m.group(2).lower())
+        if month is None:
+            return None
+        try:
+            return date(int(m.group(1)), month, int(m.group(3)))
+        except ValueError:
+            return None
     # YYYY-MM-DD
     m = re.match(r"(\d{4})-(\d{2})-(\d{2})", s)
     if m:
-        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
     return None
 
 
@@ -601,7 +610,8 @@ def import_qif_to_acb(
         except Exception:
             wb_ro = None
 
-        print("\n[DRY RUN] Rows that would be inserted:")
+        print("\n[DRY RUN] Rows that would be inserted "
+              "(counts before duplicate filtering):")
         for ticker, rows in sorted(rows_by_sheet.items()):
             ws_ro = None
             if wb_ro:
@@ -616,7 +626,7 @@ def import_qif_to_acb(
                     last = _find_last_data_row(ws_ro)
                     ins  = _find_insertion_row(ws_ro, r["acb_date"], last)
                     bal  = _get_share_balance_before_row(ws_ro, ins)
-                    if bal:
+                    if bal and bal > 0:
                         display_price = _derive_roc_price(r["raw_amount"], bal)
                 print(f"    {r['acb_date']}  {r['acb_type']:4s}  "
                       f"price={display_price}  shares={r['shares']}  "
@@ -734,6 +744,7 @@ def import_qif_to_acb(
                 if verbose:
                     print(w)
                 skipped += 1
+                imported -= 1
                 existing[dup_key] -= 1
                 continue
 

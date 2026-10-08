@@ -162,9 +162,13 @@ def _parse_date_arg(value, name):
 def _resolve_date_range(args):
     start = end = None
     if args.year:
-        year  = int(args.year)
-        start = date(year, 1, 1)
-        end   = date(year, 12, 31)
+        try:
+            year  = int(args.year)
+            start = date(year, 1, 1)
+            end   = date(year, 12, 31)
+        except ValueError:
+            print(f"ERROR: Invalid year: {args.year!r}", file=sys.stderr)
+            sys.exit(1)
     if args.start:
         start = _parse_date_arg(args.start, "--start")
     if args.end:
@@ -236,12 +240,20 @@ def run_export_pipeline(
         return {"fatal": "No transactions remain after date filtering."}
 
     mode_filtered = _filter_by_mode(filtered, mode)
+    if not mode_filtered:
+        return {"fatal": f"No transactions match mode {mode!r}."}
+
     tickers_needed = sorted({t["ticker"] for t in mode_filtered})
 
     if account_periods is None and default_account is None:
+        if not sys.stdin.isatty():
+            return {"fatal": "No account_periods.json found and --account not specified "
+                             "(non-interactive run)."}
         print("\nNo account_periods.json found and --account not specified.")
         account_periods = interactive_account_setup(tickers_needed)
     if security_map is None:
+        if not sys.stdin.isatty():
+            return {"fatal": "No security_map.json found (non-interactive run)."}
         print("\nNo security_map.json found.")
         security_map = interactive_security_setup(tickers_needed)
 
@@ -263,7 +275,10 @@ def run_export_pipeline(
     if account_periods is not None and unresolved_tickers:
         print(f"\n[WARN] These tickers have no account mapping: "
               f"{', '.join(sorted(unresolved_tickers))}")
-        answer = input("Run setup wizard for missing tickers? (y/n): ").strip().lower()
+        if sys.stdin.isatty():
+            answer = input("Run setup wizard for missing tickers? (y/n): ").strip().lower()
+        else:
+            answer = "n"
         if answer == "y":
             new_periods = interactive_account_setup(sorted(unresolved_tickers))
             account_periods.update(new_periods)
@@ -293,7 +308,8 @@ def run_export_pipeline(
     skipped = len(mode_filtered) - len(resolved)
 
     if not resolved:
-        return {"fatal": "No transactions could be resolved to an account."}
+        return {"fatal": "No transactions could be resolved to an account.",
+                "warnings": warnings}
 
     qif_groups = build_qif_records(resolved, verbose=verbose)
     all_dates  = [t["trade_date"] for t in resolved]
@@ -596,6 +612,7 @@ def _collect_export_options(dry_run: bool):
             yr = int(year_raw)
             start_date, end_date = date(yr, 1, 1), date(yr, 12, 31)
         except ValueError:
+            _warn(f"Ignoring invalid year {year_raw!r} - no date filter applied.")
             start_date = end_date = None
     else:
         start_date = _input_date("  Start date (YYYY-MM-DD, blank=no limit): ", True)
@@ -771,6 +788,8 @@ def run_interactive():
                 security_map=security_map,
             )
             if result.get("fatal"):
+                for w in result.get("warnings", []) or []:
+                    _warn(w)
                 _err(result["fatal"])
             else:
                 _print_export_summary(result, acb_path, mode, start_date, end_date)
@@ -792,6 +811,8 @@ def run_interactive():
                 dry_run=dry_run, verbose=verbose,
             )
             if result.get("fatal"):
+                for w in result.get("warnings", []) or []:
+                    _warn(w)
                 _err(result["fatal"])
             else:
                 _print_import_summary(result, qif_path)
@@ -829,6 +850,8 @@ def main(argv=None):
                 dry_run=args.dry_run, verbose=args.verbose,
             )
             if result.get("fatal"):
+                for w in result.get("warnings", []) or []:
+                    print(w, file=sys.stderr)
                 print(f"FATAL: {result['fatal']}", file=sys.stderr); sys.exit(1)
             _print_import_summary(result, args.import_qif)
             return 0
@@ -844,6 +867,8 @@ def main(argv=None):
             account_periods=account_periods, security_map=security_map,
         )
         if result.get("fatal"):
+            for w in result.get("warnings", []) or []:
+                print(w, file=sys.stderr)
             print(f"FATAL: {result['fatal']}", file=sys.stderr); sys.exit(1)
         _print_export_summary(result, acb_path, args.mode, start_date, end_date)
 

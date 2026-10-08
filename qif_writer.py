@@ -147,7 +147,10 @@ def _render_qif(account_name: str, blocks: list, start_date=None) -> str:
 
 
 def _build_filename(account_name: str, start_date, end_date) -> str:
-    safe      = account_name.replace(" ", "_").replace("/", "-")
+    safe = account_name.replace(" ", "_").replace("/", "-")
+    for bad in '<>:"\\|?*':
+        safe = safe.replace(bad, "-")
+    safe = safe.strip().strip(".") or "account"
     start_str = start_date.strftime("%Y%m%d") if start_date else "unknown"
     end_str   = end_date.strftime("%Y%m%d")   if end_date   else "unknown"
     return f"{safe}_{start_str}_{end_str}.qif"

@@ -213,11 +213,11 @@ Useful when a fund moved between accounts during its history.
 {
   "VBAL": [
     {"account": "Your Account A", "start": "2021-01-01", "end": "2025-08-10"},
-    {"account": "Your Account Name",      "start": "2025-08-11"}
+    {"account": "Your Account B", "start": "2025-08-11"}
   ],
   "ZCN": [
     {"account": "Your Account A", "start": "2021-01-01", "end": "2025-08-10"},
-    {"account": "Your Account Name",      "start": "2025-08-11"}
+    {"account": "Your Account B", "start": "2025-08-11"}
   ]
 }
 ```

@@ -397,13 +397,26 @@ def load_account_periods(path):
             raise ValueError(f"account_periods.json: {ticker!r} must be a list.")
         parsed_periods = []
         for p in periods:
+            if not isinstance(p, dict):
+                raise ValueError(f"account_periods.json: {ticker!r} entry must be a JSON object.")
             account   = p.get("account")
             start_raw = p.get("start")
             end_raw   = p.get("end")
             if not account or not start_raw:
                 raise ValueError("Each period needs 'account' and 'start'.")
-            start_dt = datetime.strptime(start_raw, "%Y-%m-%d").date()
-            end_dt   = datetime.strptime(end_raw,   "%Y-%m-%d").date() if end_raw else None
+            if not isinstance(start_raw, str) or (
+                end_raw is not None and end_raw != "" and not isinstance(end_raw, str)
+            ):
+                raise ValueError(
+                    f"account_periods.json: {ticker!r} 'start'/'end' must be YYYY-MM-DD strings."
+                )
+            try:
+                start_dt = datetime.strptime(start_raw, "%Y-%m-%d").date()
+                end_dt   = datetime.strptime(end_raw,   "%Y-%m-%d").date() if end_raw else None
+            except ValueError:
+                raise ValueError(
+                    f"account_periods.json: {ticker!r} has a bad date; use YYYY-MM-DD."
+                )
             parsed_periods.append({"account": account, "start": start_dt, "end": end_dt})
         parsed_periods.sort(key=lambda x: x["start"])
         for i in range(len(parsed_periods) - 1):

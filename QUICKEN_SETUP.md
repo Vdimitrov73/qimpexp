@@ -66,7 +66,7 @@ IntuitID=1007
 InformExec=FALSE
 ```
 
-> Replace `Administrator` with your actual Windows username.
+> Replace `C:\path\to\QImpExp` with the folder where you placed the script.
 
 Also find the `AddApps` line (usually near the top of the file) and
 add `;QHI` if it is not already present:

@@ -1,14 +1,22 @@
 # ── Personal config and data — NEVER commit these ────────────────────────────
 account_periods.json
 security_map.json
+ExportToACB.vbs
+!ExportToACB.sample.vbs
+qimpexp_run.bat
 
 # ACB spreadsheets (personal financial data)
 *.xlsx
 *.xls
 !acb_worksheet_template.xlsx
+# Importer safety backups (same folder as the workbook)
+*_backup_*.xlsx
 
 # QIF output files (generated)
 *.qif
+*.QIF
+!tests/data/*.qif
+!tests/data/*.QIF
 
 # ── Tests (local only) ────────────────────────────────────────────────────────
 test_qimpexp.py
