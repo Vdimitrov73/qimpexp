@@ -22,7 +22,7 @@ qif_writer.py           QIF building and file writing
 qif_importer.py         Phase 2 — QIF → ACB reverse import
 ca_calendar.py          Canadian TSX market calendar (T+1 settlement)
 qif_colors.py           ANSI colour utilities for interactive menu
-ExportToACB.vbs         Quicken toolbar button script (export + import automation)
+ExportToACB.sample.vbs  Sample Quicken toolbar button script (personal copy: ExportToACB.vbs, git-ignored)
 test_qimpexp.py         Full test suite (stdlib unittest, no test runner needed)
 ```
 

@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [1.1.4] — 2026-10-08
+
+### Fixed
+- Non-interactive (scheduled/CLI) exports no longer block on setup-wizard
+  prompts: missing config or a mode matching nothing now returns a clean
+  fatal instead of hanging on `input()`.
+- `--year` with a non-numeric or out-of-range value now exits(1) with an
+  error instead of a traceback; a mistyped year in the interactive menu
+  warns instead of silently dropping the date filter.
+- Hand-edited `account_periods.json` mistakes (non-object entries,
+  non-string dates) and malformed sheet dates now raise clean config
+  errors or parse as unknown instead of crashing.
+- Re-importing an already-imported QIF no longer overcounts `Imported`;
+  the dry-run ROC preview uses the same share-balance guard as the write
+  path and is labeled "before duplicate filtering".
+- The "no transactions could be resolved to an account" fatal now carries
+  its `[SKIP]` warnings, and CLI/menu print them before exiting.
+- QIF filenames replace Windows-illegal characters instead of crashing
+  on accounts whose names contain them.
+
+### Changed
+- Personal `ExportToACB.vbs` untracked (repo ships
+  `ExportToACB.sample.vbs`); docs sanitized of real account names and
+  local paths.
+
+### Added
+- `tests/data/sample.qif` example plus round-trip, template-load, and
+  duplicate-counter regression tests.
+
 ## [1.1.3] — 2026-08-10
 
 ### Fixed

@@ -4,6 +4,10 @@ This document explains how to configure Quicken 2009 to automatically
 export the current year's QIF and update your ACB workbook with one
 button click using `ExportToACB.vbs`.
 
+> The repo ships `ExportToACB.sample.vbs` — copy it to `ExportToACB.vbs`
+> (your personal, git-ignored copy) and fill in your values first.
+> Below, `ExportToACB.vbs` always means your local copy.
+
 Tested on Quicken Home & Business 2009 R2 Canadian Edition (Windows).
 Expected to work on Quicken 2007–2013 for Windows with possible
 adjustments to keyboard shortcuts.
@@ -36,14 +40,15 @@ Not compatible with Quicken 2014 or later.
 - `qimpexp.exe` (or `qimpexp.py` + Python 3.9+) — see [README.md](README.md)
 - `security_map.json` placed next to `acb_worksheet.xlsx` — see
   [Security Map](#security-map) below
-- `ExportToACB.vbs` (this repo) placed in
+- `ExportToACB.sample.vbs` (this repo), copied to your personal
+  `ExportToACB.vbs` and placed in
   `Documents\QImpExp\`
 
 ---
 
 ## Step 1 — Place the Script
 
-Copy `ExportToACB.vbs` to:
+Copy `ExportToACB.sample.vbs` to `ExportToACB.vbs` at:
 C:\Users<YourUsername>\Documents\QImpExp\ExportToACB.vbs
 
 Replace `<YourUsername>` with your actual Windows username.
@@ -195,7 +200,7 @@ receive your T-slips each year, use the qimpexp interactive menu
 |---|---|
 | `qimpexp.exe` | Standalone Windows executable (also on GitLab/GitHub Releases) |
 | `qimpexp.py` | CLI entry point and interactive menu |
-| `ExportToACB.vbs` | Automates Quicken export and triggers qimpexp import |
+| `ExportToACB.sample.vbs` | Sample script — copy to personal `ExportToACB.vbs`; automates Quicken export and triggers qimpexp import |
 | `security_map.json` | Ticker → Quicken security name mapping (place next to workbook) |
 | `account_periods.json` | Ticker → Quicken account name mapping with date ranges |
 | `README.md` | Full project documentation |

@@ -68,8 +68,10 @@ next to your workbook.
 
 ## Quicken Toolbar Button Integration
 
-QImpExp includes `ExportToACB.vbs`, a VBScript that automates the full
-export → import cycle from a single Quicken toolbar button:
+QImpExp includes `ExportToACB.sample.vbs`, a sample VBScript that automates
+the full export → import cycle from a single Quicken toolbar button.
+Copy it to `ExportToACB.vbs` — your personal, git-ignored copy — and
+fill in your account name and paths before use:
 
 1. Drives Quicken's **File → Export → QIF File** dialog automatically.
 2. Exports the current year's transactions for your investment account.
@@ -78,13 +80,14 @@ export → import cycle from a single Quicken toolbar button:
 
 See **[QUICKEN_SETUP.md](QUICKEN_SETUP.md)** for setup instructions.
 
-### `ExportToACB.vbs` configuration
+### `ExportToACB.sample.vbs` configuration
 
-Open the script in any text editor and adjust these constants at the top:
+Copy the sample to `ExportToACB.vbs` first, then open your copy in any
+text editor and adjust these constants at the top:
 
 | Constant | Default | What to change |
 |---|---|---|
-| `ACCOUNT_C_PRESSES` | `9` | Number of times to press `C` in the account dropdown to reach your account |
+| `ACCOUNT_C_PRESSES` | `1` | Number of times to press `C` in the account dropdown to reach your account |
 | `MENU_EXPORT` | `"e"` | Accelerator key for **Export** in the File menu |
 | `MENU_QIF` | `"q"` | Accelerator key for **QIF File...** in the Export submenu |
 | `baseDir` | `%USERPROFILE%\Documents\Tax Documents\QImpExp\` | Folder containing the QIF export and qimpexp |
@@ -101,7 +104,7 @@ qif_writer.py           QIF building and file writing
 qif_importer.py         Phase 2 — QIF → ACB reverse import
 ca_calendar.py          Canadian TSX market calendar (T+1 settlement)
 qif_colors.py           ANSI colour utilities for the interactive menu
-ExportToACB.vbs         Quicken toolbar button script (export + import automation)
+ExportToACB.sample.vbs   Sample Quicken toolbar button script (copy to ExportToACB.vbs, personal git-ignored copy)
 version.txt             PyInstaller version resource (maintainer use)
 QUICKEN_SETUP.md        Quicken toolbar button setup guide
 account_periods.json  Example account period config
