@@ -224,6 +224,7 @@ def reconstruct_share_balances(transactions, verbose=False):
     for ticker, txns in by_ticker.items():
         txns_sorted = sorted(txns, key=lambda x: (x["trade_date"], x["source_row_number"] or 0))
         running_balance = Decimal("0")
+        missing_g_rows = 0  # ROC rows with no cached col G (warned once per ticker below)
 
         for txn in txns_sorted:
             txn = dict(txn)
@@ -245,12 +246,11 @@ def reconstruct_share_balances(transactions, verbose=False):
                 # Priority 1: use col G balance from workbook (pre-computed, authoritative)
                 col_g = txn.get("col_g_balance")
                 if col_g is None:
-                    w = (f"[WARN] {ticker} row {txn['source_row_number']}: "
-                          f"no cached col G value (workbook not recalculated?) — "
-                          f"ROC uses running Buy/Sell balance")
-                    warnings_out.append(w)
+                    missing_g_rows += 1
                     if verbose:
-                        print(w)
+                        print(f"[BALANCE] {ticker} row {txn['source_row_number']}: "
+                              f"no cached col G value — ROC uses running "
+                              f"Buy/Sell balance")
                 if col_g is not None and col_g > 0:
                     shares_for_roc = col_g
                     if verbose:
@@ -288,6 +288,18 @@ def reconstruct_share_balances(transactions, verbose=False):
 
             txn["derived_share_balance"] = running_balance
             result.append(txn)
+
+        if missing_g_rows:
+            plural = "s" if missing_g_rows != 1 else ""
+            verb = "have" if missing_g_rows != 1 else "has"
+            w = (f"[WARN] {ticker}: {missing_g_rows} ROC row{plural} {verb} "
+                 f"no cached col G value (workbook was not opened and "
+                 f"resaved in Excel?) — ROC amounts fall back to the running "
+                 f"Buy/Sell balance (identical on clean sheets). Open and "
+                 f"save the workbook in Excel to restore cached balances.")
+            warnings_out.append(w)
+            if verbose:
+                print(w)
 
     result.sort(key=lambda x: (x["trade_date"], x["source_row_number"] or 0))
     return result, warnings_out

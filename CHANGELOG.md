@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [1.1.6] — 2026-10-09
+
+### Fixed
+- Missing column-G cache now warns once per ticker (with the ROC row
+  count) instead of once per ROC row; the message explains the Excel
+  recalculation fallback and that amounts match on clean sheets.
+
 ## [1.1.5] — 2026-10-09
 
 ### Added
