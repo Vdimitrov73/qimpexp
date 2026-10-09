@@ -178,6 +178,12 @@ annual T3/T5 tax slips, not from Quicken's `Div` entries. After you
 receive your T-slips each year, use the qimpexp interactive menu
 (option 3 — Import QIF, mode `tax-adjustments`) to add those rows.
 
+Reinvested dividends (a Quicken `Buy` whose memo begins with `DRIP`,
+case-insensitive, e.g. `Drip VRE`) are
+imported without the T+1 shift — the Quicken date is already the settlement
+date — and marked `DRIP` in column K. Plain `Buy` and `Sell` rows shift to
+the next trading day as before. `ReinvDiv` actions are skipped.
+
 ---
 
 ## Troubleshooting

@@ -11,6 +11,7 @@ Key behaviour:
 """
 
 import json
+import os
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -46,8 +47,10 @@ def _excel_date_to_python(serial):
         n = int(float(str(serial).strip()))
         if n <= 0:
             return None
-        if n >= 60:
-            n -= 1
+        if n == 60:
+            pass            # phantom 1900-02-29 collapses to Feb 28
+        elif n < 60:
+            n += 1          # pre-phantom serials need the +1 with this epoch
         return EXCEL_EPOCH + timedelta(days=n)
     except (ValueError, OverflowError, TypeError):
         return None
@@ -92,7 +95,8 @@ def _parse_decimal(raw):
 
 def _parse_row_values(raw_date, raw_type, raw_price, raw_shares, raw_commission,
                       raw_col_g,   # column G: Share Balance (may be None or a formula result)
-                      ticker, row_num, warnings):
+                      ticker, row_num, warnings, raw_col_k=None):
+                      # column K: DRIP marker (may be absent on short rows)
     """
     Parse pre-extracted cell values into a raw transaction dict.
 
@@ -101,6 +105,10 @@ def _parse_row_values(raw_date, raw_type, raw_price, raw_shares, raw_commission,
       - raw_col_g (col G) is stored as 'col_g_balance' for use in
         reconstruct_share_balances().
       - A warning is emitted when col D is non-empty on a ROC row.
+
+    Column K holds the DRIP marker written by the QIF importer.  It sets
+    the 'drip' flag only on Buy rows; it is ignored (silently) for
+    Sell/ROC rows.
     """
     type_str = str(raw_type).strip() if raw_type is not None else ""
 
@@ -165,6 +173,10 @@ def _parse_row_values(raw_date, raw_type, raw_price, raw_shares, raw_commission,
         else:
             memo = "ROC adjustment"
 
+    drip = (type_norm == "Buy"
+            and raw_col_k is not None
+            and str(raw_col_k).strip().upper() == "DRIP")
+
     return {
         "source_sheet":       ticker,
         "source_row_number":  row_num,
@@ -181,6 +193,7 @@ def _parse_row_values(raw_date, raw_type, raw_price, raw_shares, raw_commission,
         "memo":               memo,
         "account_name":       None,
         "security_name":      None,
+        "drip":               drip,
     }, None
 
 
@@ -231,6 +244,13 @@ def reconstruct_share_balances(transactions, verbose=False):
             elif action == "RtrnCapX":
                 # Priority 1: use col G balance from workbook (pre-computed, authoritative)
                 col_g = txn.get("col_g_balance")
+                if col_g is None:
+                    w = (f"[WARN] {ticker} row {txn['source_row_number']}: "
+                          f"no cached col G value (workbook not recalculated?) — "
+                          f"ROC uses running Buy/Sell balance")
+                    warnings_out.append(w)
+                    if verbose:
+                        print(w)
                 if col_g is not None and col_g > 0:
                     shares_for_roc = col_g
                     if verbose:
@@ -326,10 +346,12 @@ def load_workbook_transactions(acb_path, fund_filter=None, verbose=False):
             raw_commission = row[4] if len(row) > 4 else None  # col E
             # col F (index 5) = Capital Gains — skip
             raw_col_g      = row[6] if len(row) > 6 else None  # col G = Share Balance
+            # cols H-J (index 7-9) are formulas — skip
+            raw_col_k      = row[10] if len(row) > 10 else None  # col K = DRIP marker
 
             txn, warn = _parse_row_values(
                 raw_date, raw_type, raw_price, raw_shares, raw_commission,
-                raw_col_g, ticker, row_num, warnings
+                raw_col_g, ticker, row_num, warnings, raw_col_k
             )
             if txn is not None:
                 transactions.append(txn)
@@ -417,6 +439,11 @@ def load_account_periods(path):
                 raise ValueError(
                     f"account_periods.json: {ticker!r} has a bad date; use YYYY-MM-DD."
                 )
+            if end_dt is not None and end_dt < start_dt:
+                raise ValueError(
+                    f"account_periods.json: {ticker!r} has end before start "
+                    f"({start_raw} > {end_raw})."
+                )
             parsed_periods.append({"account": account, "start": start_dt, "end": end_dt})
         parsed_periods.sort(key=lambda x: x["start"])
         for i in range(len(parsed_periods) - 1):
@@ -436,6 +463,14 @@ def load_account_periods(path):
     return parsed
 
 
+def _atomic_json_write(path, obj):
+    tmp = Path(path).with_name(Path(path).name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
 def save_account_periods(path, periods_dict):
     output = {}
     for ticker, periods in sorted(periods_dict.items()):
@@ -445,9 +480,7 @@ def save_account_periods(path, periods_dict):
             if p["end"] is not None:
                 entry["end"] = p["end"].strftime("%Y-%m-%d")
             output[ticker].append(entry)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(output, f, indent=2)
-        f.write("\n")
+    _atomic_json_write(path, output)
 
 
 # ---------------------------------------------------------------------------
@@ -466,9 +499,7 @@ def load_security_map(path):
 
 
 def save_security_map(path, mapping):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump({k: v for k, v in sorted(mapping.items())}, f, indent=2)
-        f.write("\n")
+    _atomic_json_write(path, {k: v for k, v in sorted(mapping.items())})
 
 
 # ---------------------------------------------------------------------------

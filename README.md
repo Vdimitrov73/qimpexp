@@ -285,9 +285,17 @@ $26.83
 | Sell | `Sell` | price × shares − commission |
 | ROC (per-unit > 0) | `RtrnCapX` | per-unit × share balance |
 | ROC (per-unit < 0) | `RtrnCapX` | negative amount (phantom distribution) |
+| Buy (DRIP, col K) | `Buy` + Memo `DRIP` | price × shares, sheet date used as-is |
 
 `RtrnCapX` blocks include `L[Account]` and `$amount` lines, matching
 Quicken's native export format exactly.
+
+A `Buy` whose Quicken memo begins with `DRIP` (case-insensitive, e.g.
+`DRIP`, `Drip VRE` — a true reinvestment) is
+imported without the T+1 shift — the Quicken date is already the settlement
+date — and marked `DRIP` in column K. Plain `Buy` and `Sell` rows shift to
+the next trading day on import. Any other memo (e.g. transfer notes) has no
+effect, and `ReinvDiv` actions are skipped like other non-writable actions.
 
 ---
 

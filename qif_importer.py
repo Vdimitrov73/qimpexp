@@ -87,6 +87,7 @@ _COL_ALIGN = {
     8: Alignment(horizontal="right", vertical="center"),
     9: Alignment(horizontal="right", vertical="center"),
     10: Alignment(horizontal="right", vertical="center"),
+    11: Alignment(horizontal="general"),   # col K: DRIP text marker
 }
 
 
@@ -98,7 +99,9 @@ def _get_ref_fonts(ws, last_data_row: int) -> dict:
     """
     Read font objects from the nearest existing data row so we copy the exact
     workbook font rather than hard-coding a name/size.
-    Returns {col_index: Font} for columns 1-10.
+    Returns {col_index: Font} for columns 1-11.
+    Column 11 (K, DRIP marker) falls back to the col B font when the sheet
+    has no K column yet, so reading it never widens the sheet.
     """
     fonts = {}
     # Walk backwards from last_data_row to find a row with actual data in col B
@@ -106,10 +109,18 @@ def _get_ref_fonts(ws, last_data_row: int) -> dict:
         if ws.cell(r, 2).value:
             for col in range(1, 11):
                 fonts[col] = copy(ws.cell(r, col).font)
+            if ws.max_column >= 11:
+                fonts[11] = copy(ws.cell(r, 11).font)
+            else:
+                fonts[11] = copy(ws.cell(r, 2).font)
             return fonts
     # Fallback: use header row fonts
     for col in range(1, 11):
         fonts[col] = copy(ws.cell(1, col).font)
+    if ws.max_column >= 11:
+        fonts[11] = copy(ws.cell(1, 11).font)
+    else:
+        fonts[11] = copy(ws.cell(1, 2).font)
     return fonts
 
 
@@ -255,6 +266,41 @@ def _get_existing_rows(ws, last_data_row: int) -> Counter:
                 pass
     return existing
 
+
+def _get_drip_keys(ws, last_data_row: int) -> Counter:
+    """
+    Return a Counter like _get_existing_rows but counting only rows whose
+    col K marker (stripped, case-insensitive) is DRIP. Used to warn when a
+    drip import matches a sheet row that lacks the marker. Each matched
+    row only cancels out ONE drip transaction (mirrors the multiset).
+    """
+    drip_keys = Counter()
+    if ws.max_column < 11:
+        return drip_keys  # no K column — and never widen the sheet by reading
+    for r in range(2, last_data_row + 1):
+        txn_type = ws.cell(r, 2).value
+        if not txn_type:
+            continue
+        k_val = ws.cell(r, 11).value
+        if not (isinstance(k_val, str) and k_val.strip().upper() == "DRIP"):
+            continue
+        d = _parse_cell_date(ws.cell(r, 1).value)
+        price_val  = ws.cell(r, 3).value
+        shares_val = ws.cell(r, 4).value
+        if d and txn_type and price_val is not None:
+            try:
+                typ = str(txn_type).strip()
+                if typ in ("Buy", "Sell"):
+                    pk = round(float(price_val), 2)
+                    sk = round(float(shares_val), 4) if shares_val is not None else None
+                else:  # ROC
+                    pk = round(float(price_val), 5)
+                    sk = None
+                drip_keys[(d, typ, pk, sk)] += 1
+            except (ValueError, TypeError):
+                pass
+    return drip_keys
+
 def _format_date_str(d: date) -> str:
     """Format a date as YYYY-MMM-DD (workbook canonical format)."""
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -353,8 +399,10 @@ def parse_qif_file(qif_path: Path) -> tuple:
     transactions    = []
     skipped_actions = {}
     current         = {}
+    in_account_block = False
 
-    # Actions the importer can write to the ACB workbook
+    # Actions the importer can write to the ACB workbook.
+    # ReinvDiv is NOT writable: reinvestments arrive as Buy + Memo DRIP.
     _WRITABLE = {"Buy", "Sell", "RtrnCapX"}
 
     def _flush():
@@ -386,10 +434,27 @@ def parse_qif_file(qif_path: Path) -> tuple:
         body = line[1:].strip()
 
         if tag == "!":
+            in_account_block = (body == "Account")
             continue
-        if tag == "L" and not current:
+        if in_account_block:
+            # !Account header block (N<name>, T<type>, ^) as written by our
+            # exporter and accepted by Quicken. Anything else ends the block
+            # and is parsed normally (guards against a missing ^ line).
+            if tag == "N":
+                account_name = body
+                continue
+            if tag in ("T", "C", "^"):
+                if tag == "^":
+                    in_account_block = False
+                continue
+            in_account_block = False
+        if tag == "L":
+            # File account header: a bare L[...] line, or the L[...] line of
+            # the leading Cash preamble block (D + NCash + L[...]), whose D/N
+            # lines already populated `current`. L[...] lines inside real
+            # transaction blocks (e.g. RtrnCapX) are not the file account.
             m = re.match(r"^\[(.+)\]$", body)
-            if m:
+            if m and (not current or current.get("action") == "Cash"):
                 account_name = m.group(1)
             continue
         if tag == "^":
@@ -440,6 +505,7 @@ def import_qif_to_acb(
     mode: str = "full",            # "full" | "buys-sells" | "tax-adjustments"
     dry_run: bool = False,
     verbose: bool = False,
+    account_periods=None,
 ) -> dict:
     """
     Read *qif_path* and insert matching transactions into *acb_path* in date order.
@@ -448,6 +514,12 @@ def import_qif_to_acb(
       "full"             — Buy + Sell + ROC
       "buys-sells"       — Buy + Sell only
       "tax-adjustments"  — ROC (RtrnCapX) only
+
+    When account_periods is given and the QIF carries an account header,
+    each row is checked against the account configured for its trade date
+    (same date semantics as the export-side resolve_account): rows from a
+    different account, or with no configured account for their date, are
+    skipped with a warning instead of being inserted.
 
     Rows are inserted at the correct chronological position using ws.insert_rows(),
     so importing older transactions into a sheet with newer data works correctly.
@@ -463,7 +535,8 @@ def import_qif_to_acb(
     elif mode == "tax-adjustments":
         allowed_actions = {"RtrnCapX"}
     else:
-        allowed_actions = {"Buy", "Sell", "RtrnCapX"}
+        return {"fatal": f"Unknown mode {mode!r}. Expected 'full', 'buys-sells' or 'tax-adjustments'.",
+                "warnings": [], "imported": 0, "skipped": 0, "rows_by_sheet": {}}
 
     # --- Parse QIF ---
     account_name, transactions, skipped_actions, err = parse_qif_file(qif_path)
@@ -488,6 +561,13 @@ def import_qif_to_acb(
     skipped  = 0
 
     late_skipped = 0  # rows that pass initial mapping but fail during write
+    account_skipped = 0  # rows rejected by account validation
+
+    if account_periods is not None and not account_name:
+        w = "[WARN] No account name found in QIF — account validation skipped"
+        warnings_out.append(w)
+        if verbose:
+            print(w)
 
     for txn in transactions:
         action = txn["action"]
@@ -521,17 +601,59 @@ def import_qif_to_acb(
             skipped += 1
             continue
 
+        # --- Account validation: the QIF file account must be the account
+        # configured for this ticker on the transaction's trade date
+        # (same date semantics as the export-side resolve_account).
+        if account_periods is not None and account_name:
+            periods = account_periods.get(ticker) or []
+            expected = None
+            for p in periods:
+                if p["start"] <= trade_date and (
+                        p["end"] is None or trade_date <= p["end"]):
+                    expected = p["account"]
+                    break
+            if expected is None:
+                w = (f"[SKIP] {ticker} {trade_date} {action}: no account "
+                     f"configured for this date — skipped; update "
+                     f"account_periods.json")
+                warnings_out.append(w)
+                if verbose:
+                    print(w)
+                skipped += 1
+                account_skipped += 1
+                continue
+            if expected.strip().upper() != account_name.strip().upper():
+                w = (f"[SKIP] {ticker} {trade_date} {action}: QIF account "
+                     f"{account_name!r} does not match configured account "
+                     f"{expected!r} for this date — skipped")
+                warnings_out.append(w)
+                if verbose:
+                    print(w)
+                skipped += 1
+                account_skipped += 1
+                continue
+
         price  = txn.get("price")
         shares = txn.get("shares")
         amount = txn.get("amount")
 
+        # A Buy whose memo begins with DRIP (case-insensitive, e.g.
+        # "DRIP", "Drip", "Drip VRE") is a true reinvestment: its QIF date
+        # is already the settlement date, so no T+1 conversion. Any other
+        # memo (e.g. "Xfr From: ...") is inert. Sell/RtrnCapX never drip.
+        memo = txn.get("memo")
+        is_drip = (action == "Buy" and isinstance(memo, str)
+                   and memo.strip().upper().startswith("DRIP"))
+
         # --- Date conversion ---
-        if action in ("Buy", "Sell"):
+        if action in ("Buy", "Sell") and not is_drip:
             acb_date = next_trading_day(trade_date)
             if verbose:
                 print(f"[DATE] {ticker} {trade_date} ({action}) -> settlement {acb_date}")
         else:
             acb_date = trade_date
+            if verbose and is_drip:
+                print(f"[DATE] {ticker} {trade_date} (Buy DRIP memo) -> as-is {acb_date}")
 
         # --- Derive missing price or shares from amount for Buy/Sell ---
         if action in ("Buy", "Sell"):
@@ -579,6 +701,7 @@ def import_qif_to_acb(
                 "shares":     None,
                 "commission": None,
                 "raw_amount": amount,
+                "drip":       False,
             }
 
         else:
@@ -592,13 +715,19 @@ def import_qif_to_acb(
                 "shares":     shares,
                 "commission": None,
                 "raw_amount": amount,
+                "drip":       is_drip,
             }
 
         rows_by_sheet.setdefault(ticker, []).append(row_data)
         imported += 1
 
     if not rows_by_sheet:
-        return {"fatal": "No transactions matched a known ticker.",
+        if account_skipped:
+            fatal = (f"No transactions matched QIF account {account_name!r} "
+                     f"for their dates — all were skipped by account validation.")
+        else:
+            fatal = "No transactions matched a known ticker."
+        return {"fatal": fatal,
                 "warnings": warnings_out, "imported": 0,
                 "skipped": skipped, "rows_by_sheet": {}}
 
@@ -630,7 +759,8 @@ def import_qif_to_acb(
                         display_price = _derive_roc_price(r["raw_amount"], bal)
                 print(f"    {r['acb_date']}  {r['acb_type']:4s}  "
                       f"price={display_price}  shares={r['shares']}  "
-                      f"amount={r['raw_amount']}")
+                      f"amount={r['raw_amount']}"
+                      f"{'  DRIP' if r.get('drip') else ''}")
         if wb_ro:
             wb_ro.close()
 
@@ -697,6 +827,7 @@ def import_qif_to_acb(
         # Build duplicate key set from current sheet state
         last_data_row = _find_last_data_row(ws)
         existing      = _get_existing_rows(ws, last_data_row)
+        drip_existing = _get_drip_keys(ws, last_data_row)
 
         # Read reference fonts from the existing sheet ONCE before any insertions
         fonts = _get_ref_fonts(ws, last_data_row)
@@ -738,14 +869,21 @@ def import_qif_to_acb(
                 shares_key = None
             dup_key = (acb_date, acb_type, price_key, shares_key)
             if existing[dup_key] > 0:
-                w = (f"[SKIP-DUP] {ticker} {acb_date} {acb_type} "
-                     f"price={price} — already in sheet")
+                if row_data.get("drip") and drip_existing[dup_key] <= 0:
+                    w = (f"[WARN] {ticker} {acb_date} {acb_type} "
+                         f"price={price} — already in sheet without DRIP marker; "
+                         f"not inserted")
+                else:
+                    w = (f"[SKIP-DUP] {ticker} {acb_date} {acb_type} "
+                         f"price={price} — already in sheet")
                 warnings_out.append(w)
                 if verbose:
                     print(w)
                 skipped += 1
                 imported -= 1
                 existing[dup_key] -= 1
+                if drip_existing[dup_key] > 0:
+                    drip_existing[dup_key] -= 1
                 continue
 
             # Insert a blank row at the target position
@@ -782,6 +920,19 @@ def import_qif_to_acb(
             else:
                 comm_cell = ws.cell(insert_at, 5)
             _apply_cell(comm_cell, COMM_FMT, fonts[5], _COL_ALIGN[5], _BORDER)
+
+            # Col K: DRIP marker on drip rows only — other rows' K untouched.
+            # K1 header "Note" is added only when empty; never overwritten.
+            if row_data.get("drip"):
+                k1_val = ws.cell(1, 11).value
+                if k1_val is None or (isinstance(k1_val, str)
+                                      and not k1_val.strip()):
+                    k1_cell = ws.cell(1, 11, "Note")
+                    _apply_cell(k1_cell, "General", fonts.get(11, Font()),
+                                _COL_ALIGN[11], _BORDER)
+                k_cell = ws.cell(insert_at, 11, "DRIP")
+                _apply_cell(k_cell, "General", fonts.get(11, Font()),
+                            _COL_ALIGN[11], _BORDER)
 
             # --- Rewrite ALL formulas from inserted row to new last row ---
             _rewrite_formulas_from(ws, insert_at, new_last, fonts)

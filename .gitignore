@@ -43,6 +43,7 @@ build/
 env/
 venv/
 ENV/
+build_env/
 
 # ── OS / editor clutter ───────────────────────────────────────────────────────
 .DS_Store

@@ -5,6 +5,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [1.1.5] — 2026-10-09
+
+### Added
+- Memo-driven DRIP reinvestments: a `Buy` whose memo begins with `DRIP`
+  (case-insensitive, e.g. `Drip VRE`) imports at the settlement date with
+  no T+1 shift, is marked in column K, and re-exports as `NBuy` + `MDRIP`.
+- Import validates the QIF file account against `account_periods.json` for
+  each trade date; wrong-account rows skip with a warning (the account is
+  now also read from the file's Cash preamble block).
+- Exported QIF files start with a Quicken-verified `!Account` header
+  identifying the destination account.
+
+### Fixed
+- Removed the Cash pseudo-transaction from QIF output — Quicken imported
+  it as a zero-amount MiscExp.
+- Config editor hardened: guarded period index, blank-means-keep end date,
+  and pre-save validation so invalid JSON can no longer be written
+  (previously it saved, then crashed the menu on reload).
+- Unknown `--mode` now fails fast (`ValueError` on export, fatal on
+  import) instead of silently processing everything.
+- QIF and JSON config writes are atomic (temp file + replace); Excel
+  serial dates corrected by one day; end-before-start periods rejected;
+  missing column-G cache and `--year` combined with `--start/--end`
+  now warn instead of staying silent.
+
 ## [1.1.4] — 2026-10-08
 
 ### Fixed

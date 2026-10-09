@@ -3,14 +3,17 @@ qif_writer.py - Build and write Quicken QIF output.
 
 Date format: Quicken native M/D'YY with space-padded day (e.g. 9/ 2'25).
 Buy/Sell date: settlement date converted back to trade date via prev_trading_day().
+DRIP Buy (col K marker): sheet date is already settlement → no conversion;
+a Memo DRIP line is added so re-import maps it back drip-aware.
 RtrnCapX blocks: D N Y U T L[$] lines — no I or Q lines.
-Buy/Sell blocks: D N Y I Q U T lines.
+Buy/Sell blocks: D N Y I Q U T [M] lines.
 """
 
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+import os
 
 from ca_calendar import prev_trading_day
 
@@ -62,10 +65,15 @@ def _build_qif_block(txn: dict) -> list:
     """Return list of QIF field lines for one transaction (no trailing ^)."""
     lines  = []
     action = txn["normalized_action"]
+    is_drip = (action == "Buy" and txn.get("drip"))
 
     # Buy/Sell: ACB stores settlement date → convert back to trade date for Quicken
     # ROC: ACB stores record date = QIF date → no conversion needed
-    if action in ("Buy", "Sell"):
+    # DRIP Buy (col K marker): sheet date already is the settlement date →
+    # no conversion; a Memo DRIP line is added so re-import maps it back.
+    if is_drip:
+        qif_date = txn["trade_date"]
+    elif action in ("Buy", "Sell"):
         qif_date = prev_trading_day(txn["trade_date"])
     else:
         qif_date = txn["trade_date"]
@@ -89,12 +97,15 @@ def _build_qif_block(txn: dict) -> list:
         if amount is not None:
             lines.append(f"U{_fmt_amount(amount)}")
             lines.append(f"T{_fmt_amount(amount)}")
+        if is_drip:
+            lines.append("MDRIP")
 
     return lines
 
 
 def _qif_sort_date(txn: dict) -> date:
-    if txn["normalized_action"] in ("Buy", "Sell"):
+    if txn["normalized_action"] in ("Buy", "Sell") and not (
+            txn["normalized_action"] == "Buy" and txn.get("drip")):
         return prev_trading_day(txn["trade_date"])
     return txn["trade_date"]
 
@@ -134,12 +145,11 @@ def build_qif_records(transactions: list, verbose: bool = False) -> dict:
 
 
 def _render_qif(account_name: str, blocks: list, start_date=None) -> str:
-    lines = ["!Type:Invst"]
-    if start_date is not None:
-        lines.append(f"D{_fmt_date(start_date)}")
-        lines.append("NCash")
-        lines.append(f"L[{account_name}]")
-        lines.append("^")
+    # Header is a zero-amount !Account block (verified in Quicken — it does
+    # not create a MiscExp). An earlier D/NCash/L[account] pseudo-transaction
+    # did, so it was dropped. account_name/start_date stay in the signature
+    # for the existing callers (and dry-run headers).
+    lines = ["!Account", f"N{account_name}", "TInvst", "^", "!Type:Invst"]
     for block in blocks:
         lines.extend(block)
         lines.append("^")
@@ -164,8 +174,10 @@ def write_qif_files(qif_groups: dict, output_dir, start_date, end_date,
         filename = _build_filename(account_name, start_date, end_date)
         out_path = output_dir / filename
         content  = _render_qif(account_name, blocks, start_date=start_date)
-        with open(out_path, "w", encoding="utf-8", newline="\n") as f:
+        tmp_path = out_path.with_name(out_path.name + ".tmp")
+        with open(tmp_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(content)
+        os.replace(tmp_path, out_path)
         if verbose:
             print(f"[WRITE] {out_path} ({len(blocks)} transactions)")
         written.append(out_path)

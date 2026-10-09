@@ -75,6 +75,10 @@ Or from the command line:
 Buy/Sell trade dates are automatically converted to
 settlement dates (T+1 Canadian trading day).
 ROC record dates are imported unchanged.
+Reinvested dividends (a Quicken Buy whose memo
+begins with DRIP, e.g. Drip VRE) are imported
+without the T+1 shift and marked DRIP in
+column K of the sheet.
 
 After import, open the workbook and verify that the
 formulas in columns F-J look correct before saving.

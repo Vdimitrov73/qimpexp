@@ -7,7 +7,9 @@ Modes:
 """
 
 import argparse
+import os
 import sys
+import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
@@ -169,6 +171,9 @@ def _resolve_date_range(args):
         except ValueError:
             print(f"ERROR: Invalid year: {args.year!r}", file=sys.stderr)
             sys.exit(1)
+    if args.year and (args.start or args.end):
+        print("WARNING: --start/--end override --year; --year is ignored "
+              "for the bound(s) given explicitly.", file=sys.stderr)
     if args.start:
         start = _parse_date_arg(args.start, "--start")
     if args.end:
@@ -210,7 +215,7 @@ def _filter_by_mode(transactions, mode):
     if mode == "full":            return transactions
     if mode == "tax-adjustments": return [t for t in transactions if t["normalized_action"] == "RtrnCapX"]
     if mode == "buys-sells":      return [t for t in transactions if t["normalized_action"] in ("Buy","Sell")]
-    return transactions
+    raise ValueError(f"Unknown mode {mode!r}. Expected 'full', 'tax-adjustments' or 'buys-sells'.")
 
 
 def run_export_pipeline(
@@ -547,11 +552,26 @@ def _menu_edit_config(account_periods, security_map, acb_dir):
             _warn(f"{ticker} not found."); return
         for i, p in enumerate(account_periods[ticker]):
             print(f"  [{i}] {p['account']}  {p['start']} – {p['end'] or 'open'}")
-        idx = int(_input_required("  Index to edit: "))
+        try:
+            idx = int(_input_required("  Index to edit: "))
+        except ValueError:
+            _warn("Enter a number."); return
+        if not 0 <= idx < len(account_periods[ticker]):
+            _warn(f"Index out of range (0-{len(account_periods[ticker]) - 1})."); return
         p = account_periods[ticker][idx]
         new_account = input(col(CYAN, f"  Account [{p['account']}]: ")).strip() or p["account"]
         new_start   = _input_date(f"  Start [{p['start']}]: ", True) or p["start"]
-        new_end     = _input_date(f"  End [{p['end'] or 'open'}]: ", True)
+        new_end_raw = input(col(CYAN, f"  End [{p['end'] or 'open'}] (blank=keep, none=clear): ")).strip()
+        if not new_end_raw:
+            new_end = p["end"]
+        elif new_end_raw.lower() in ("none", "open"):
+            new_end = None
+        else:
+            try:
+                new_end = datetime.strptime(new_end_raw, "%Y-%m-%d").date()
+            except ValueError:
+                _warn("Use YYYY-MM-DD format — keeping existing value.")
+                new_end = p["end"]
         account_periods[ticker][idx] = {"account": new_account, "start": new_start, "end": new_end}
         _offer_save(account_periods, security_map, acb_dir)
 
@@ -562,6 +582,25 @@ def _menu_edit_config(account_periods, security_map, acb_dir):
 def _offer_save(account_periods, security_map, acb_dir):
     save = _input_choice("  Save changes? (y/n): ", [("y","yes"),("n","no")])
     if save == "y":
+        tmp = None
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".json",
+                                             delete=False, encoding="utf-8") as tf:
+                tmp = tf.name
+            save_account_periods(tmp, account_periods)
+            load_account_periods(tmp)
+        except ValueError as exc:
+            _warn(f"Not saved: {exc}")
+            if tmp is not None:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+            return
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
         ap_path = acb_dir / "account_periods.json"
         sm_path = acb_dir / "security_map.json"
         save_account_periods(ap_path, account_periods)
@@ -809,6 +848,7 @@ def run_interactive():
                 security_map=security_map,
                 mode=mode,
                 dry_run=dry_run, verbose=verbose,
+                account_periods=account_periods,
             )
             if result.get("fatal"):
                 for w in result.get("warnings", []) or []:
@@ -848,6 +888,7 @@ def main(argv=None):
                 security_map=security_map,
                 mode=args.mode,
                 dry_run=args.dry_run, verbose=args.verbose,
+                account_periods=account_periods,
             )
             if result.get("fatal"):
                 for w in result.get("warnings", []) or []:
